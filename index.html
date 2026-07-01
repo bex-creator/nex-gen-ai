@@ -38,37 +38,6 @@
             { id: "Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC", name: "Qwen 2.5 Coder (1.5B) - Core Programming (~1GB)" }
         ];
 
-        // Environment Injector utility to ensure Tailwind CSS compiles inside the sandboxed preview
-        const injectWorkspaceEnvironment = (htmlContent) => {
-            if (!htmlContent) return "";
-            let processed = htmlContent;
-
-            // 1. Force inject Tailwind CDN script if missing inside the code layer
-            if (!processed.includes("tailwindcss.com")) {
-                if (processed.includes("<head>")) {
-                    processed = processed.replace("<head>", `<head>\n\t<script src="https://cdn.tailwindcss.com"></script>`);
-                } else {
-                    processed = `<script src="https://cdn.tailwindcss.com"></script>\n` + processed;
-                }
-            }
-
-            // 2. Handle component fragments by wrapping them inside a base shell boilerplate
-            if (!processed.includes("<body") && !processed.includes("<html")) {
-                processed = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-slate-900 text-slate-100 p-6 font-sans antialiased">
-    ${processed}
-</body>
-</html>`;
-            }
-            return processed;
-        };
-
         function App() {
             const [engine, setEngine] = useState(null);
             const [isReady, setIsReady] = useState(false);
@@ -363,23 +332,23 @@
                         </div>
                     </div>
 
-                    {/* Right Interface Artifact Live Panel - Patched Container with dark mode framework styling */}
+                    {/* Right Interface Artifact Live Panel */}
                     {workspaceOpen && (
-                        <div className="w-1/2 h-full flex flex-col bg-slate-900 border-l border-slate-800 animate-fade-in-right">
-                            <div className="flex justify-between items-center p-2 bg-slate-800 border-b border-slate-700 shadow-sm">
-                                <div className="flex items-center gap-2 text-slate-300 text-xs font-semibold px-2">
+                        <div className="w-1/2 h-full flex flex-col bg-white border-l border-slate-300 animate-fade-in-right">
+                            <div className="flex justify-between items-center p-2 bg-slate-100 border-b border-slate-300 shadow-sm">
+                                <div className="flex items-center gap-2 text-slate-700 text-xs font-semibold px-2">
                                     <Icons.Cpu /> 
                                     <span>Interactive Sandbox Output</span>
                                 </div>
-                                <button onClick={() => setWorkspaceOpen(false)} className="text-slate-400 hover:text-slate-200 p-1 rounded-md hover:bg-slate-700 transition">
+                                <button onClick={() => setWorkspaceOpen(false)} className="text-slate-400 hover:text-slate-800 p-1 rounded-md hover:bg-slate-200 transition">
                                     <Icons.X />
                                 </button>
                             </div>
-                            <div className="flex-1 bg-slate-950 relative">
+                            <div className="flex-1 bg-white relative">
                                 <iframe 
                                     title="Local Live Preview Container"
-                                    srcDoc={injectWorkspaceEnvironment(workspaceContent)} 
-                                    className="w-full h-full border-none bg-transparent"
+                                    srcDoc={workspaceContent} 
+                                    className="w-full h-full border-none bg-white"
                                     sandbox="allow-scripts allow-modals"
                                 />
                             </div>
