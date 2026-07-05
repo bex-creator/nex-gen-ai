@@ -3,344 +3,183 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local AI Web Chat</title>
-    
-    <!-- Tailwind CSS & Typography Plugin -->
-    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    
-    <!-- Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <!-- Markdown Parser & DOM Purifier -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
-                    colors: { brand: { 400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7' } }
-                }
-            }
-        }
-    </script>
+    <title>Local Qwen Coder AI</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        
-        /* Custom scrollbar for chat */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
-
-        /* Formatting for user messages vs AI messages */
-        .user-message { border-radius: 1.5rem 1.5rem 0.25rem 1.5rem; }
-        .ai-message { border-radius: 1.5rem 1.5rem 1.5rem 0.25rem; }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background-color: #0d1117;
+            color: #c9d1d9;
+        }
+        h1 { color: #58a6ff; }
+        #chat-box {
+            height: 500px;
+            overflow-y: auto;
+            border: 1px solid #30363d;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background-color: #161b22;
+            border-radius: 6px;
+        }
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.8rem;
+            border-radius: 6px;
+            white-space: pre-wrap;
+        }
+        .user {
+            background-color: #1f6feb;
+            color: white;
+            margin-left: 20%;
+        }
+        .bot {
+            background-color: #21262d;
+            border: 1px solid #30363d;
+            margin-right: 20%;
+        }
+        #input-container { display: flex; gap: 0.5rem; }
+        input[type="text"] {
+            flex: 1;
+            padding: 1rem;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-size: 1rem;
+        }
+        button {
+            padding: 0 1.5rem;
+            background-color: #238636;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:disabled {
+            background-color: #21262d;
+            color: #8b949e;
+            cursor: not-allowed;
+        }
+        #status {
+            font-size: 0.9rem;
+            color: #8b949e;
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            background: #161b22;
+            border-radius: 4px;
+        }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-300 h-screen overflow-hidden flex selection:bg-brand-500 selection:text-white antialiased">
+<body>
 
-    <!-- Sidebar -->
-    <aside class="w-64 bg-slate-950 border-r border-slate-800 flex flex-col hidden md:flex transition-all">
-        <div class="p-4 border-b border-slate-800 flex items-center gap-3">
-            <div class="bg-brand-500/20 text-brand-400 p-2 rounded-lg">
-                <i data-lucide="cpu" class="w-6 h-6"></i>
-            </div>
-            <h1 class="font-bold text-lg text-white tracking-tight">Local<span class="text-brand-400">GPT</span> Web</h1>
-        </div>
-        
-        <div class="flex-1 overflow-y-auto p-4 space-y-4">
-            <div>
-                <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Model Details</h3>
-                <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 text-sm">
-                    <p class="text-white font-medium mb-1">Llama 3.1 8B Instruct</p>
-                    <p class="text-slate-400 text-xs leading-relaxed">A highly capable 8-Billion parameter reasoning model running entirely in your browser cache via WebGPU.</p>
-                </div>
-            </div>
+    <h1>Local Qwen2.5-Coder (WebGPU)</h1>
+    <div id="status">Status: Initializing... (The first time you run this, it will download ~4GB to your browser cache. Please wait.)</div>
+    
+    <div id="chat-box"></div>
+    
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Ask a coding question..." disabled>
+        <button id="send-btn" disabled>Send</button>
+    </div>
 
-            <div>
-                <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Hardware Engine</h3>
-                <div class="flex items-center gap-2 text-sm text-slate-400 bg-slate-900 border border-slate-800 rounded-xl p-3">
-                    <span id="gpu-status-dot" class="flex h-2.5 w-2.5 rounded-full bg-slate-600"></span>
-                    <span id="gpu-status-text">WebGPU Disconnected</span>
-                </div>
-            </div>
-        </div>
-        
-        <div class="p-4 border-t border-slate-800 text-xs text-slate-500 text-center">
-            Powered by WebLLM & Meta
-        </div>
-    </aside>
-
-    <!-- Main Chat Area -->
-    <main class="flex-1 flex flex-col h-full relative">
-        
-        <!-- Header (Mobile) -->
-        <header class="md:hidden flex items-center gap-3 p-4 bg-slate-950 border-b border-slate-800">
-            <div class="bg-brand-500/20 text-brand-400 p-1.5 rounded-lg">
-                <i data-lucide="cpu" class="w-5 h-5"></i>
-            </div>
-            <h1 class="font-bold text-white">Local<span class="text-brand-400">GPT</span></h1>
-        </header>
-
-        <!-- Chat History -->
-        <div id="chat-history" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 pb-32 w-full max-w-4xl mx-auto scroll-smooth">
-            <!-- Messages will be injected here -->
-        </div>
-
-        <!-- Input Area -->
-        <div class="absolute bottom-0 w-full bg-gradient-to-t from-slate-900 via-slate-900 to-transparent pt-10 pb-6 px-4">
-            <div class="max-w-4xl mx-auto relative">
-                <form id="chat-form" class="relative shadow-2xl shadow-black/50 rounded-2xl bg-slate-800 border border-slate-700 focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500 transition-all">
-                    <textarea 
-                        id="chat-input" 
-                        disabled
-                        rows="1" 
-                        placeholder="Click 'Initialize Model' to begin..." 
-                        class="w-full bg-transparent text-white rounded-2xl pl-4 pr-14 py-4 focus:outline-none resize-none max-h-48 overflow-y-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                        style="min-height: 56px;"
-                    ></textarea>
-                    <button 
-                        type="submit" 
-                        id="chat-submit" 
-                        disabled 
-                        class="absolute right-2 bottom-2 p-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl disabled:opacity-50 disabled:hover:bg-brand-600 disabled:cursor-not-allowed transition-colors"
-                    >
-                        <i data-lucide="arrow-up" class="w-5 h-5"></i>
-                    </button>
-                </form>
-                <p class="text-center text-xs text-slate-500 mt-3">AI runs completely locally in your browser. First run requires downloading model weights (several GBs).</p>
-            </div>
-        </div>
-
-        <!-- Initializing Overlay -->
-        <div id="setup-overlay" class="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div class="bg-slate-950 border border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center relative overflow-hidden">
-                <div class="absolute top-0 left-0 w-full h-1 bg-slate-800">
-                    <div id="setup-progress-bar" class="h-full bg-brand-500 transition-all duration-300" style="width: 0%"></div>
-                </div>
-                
-                <div class="bg-brand-500/10 text-brand-400 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                    <i data-lucide="download-cloud" class="w-8 h-8"></i>
-                </div>
-                
-                <h2 class="text-2xl font-bold text-white mb-2">Initialize Local AI</h2>
-                <p class="text-slate-400 text-sm mb-8 leading-relaxed">We are about to download <strong class="text-slate-300">Llama 3.1 8B</strong> into your browser cache. This is a large file and requires WebGPU support.</p>
-                
-                <div id="setup-status-box" class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm font-mono text-slate-400 mb-6 h-20 flex items-center justify-center text-center">
-                    Awaiting authorization...
-                </div>
-
-                <button id="start-btn" class="w-full py-4 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-colors flex justify-center items-center gap-2 shadow-lg shadow-brand-500/20">
-                    <i data-lucide="play" class="w-5 h-5"></i> Start Download & Engine
-                </button>
-            </div>
-        </div>
-
-    </main>
-
-    <script>
-        // Initialize Icons
-        lucide.createIcons();
-
-        // Auto-resize textarea
-        const tx = document.getElementById('chat-input');
-        tx.setAttribute('style', 'height:' + (tx.scrollHeight) + 'px;overflow-y:hidden;');
-        tx.addEventListener("input", OnInput, false);
-
-        function OnInput() {
-            this.style.height = 0;
-            this.style.height = (this.scrollHeight) + "px";
-        }
-    </script>
-
-    <!-- WebLLM Core Logic -->
     <script type="module">
         import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
-        // UI Elements
-        const setupOverlay = document.getElementById('setup-overlay');
-        const startBtn = document.getElementById('start-btn');
-        const setupStatusBox = document.getElementById('setup-status-box');
-        const setupProgressBar = document.getElementById('setup-progress-bar');
+        // This is the 7-Billion parameter Qwen2.5 Coder model, optimized for WebGPU
+        const selectedModel = "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC";
         
-        const chatForm = document.getElementById('chat-form');
-        const chatInput = document.getElementById('chat-input');
-        const chatSubmit = document.getElementById('chat-submit');
-        const chatHistory = document.getElementById('chat-history');
-        
-        const gpuStatusDot = document.getElementById('gpu-status-dot');
-        const gpuStatusText = document.getElementById('gpu-status-text');
+        const chatBox = document.getElementById("chat-box");
+        const userInput = document.getElementById("user-input");
+        const sendBtn = document.getElementById("send-btn");
+        const statusText = document.getElementById("status");
 
-        // We use one of the most powerful 8B models optimized for WebGPU
-        const selectedModel = "Llama-3.1-8B-Instruct-q4f16_1-MLC";
         let engine;
         let messages = [
-            { role: "system", content: "You are a highly capable, helpful, and concise AI assistant running locally in the user's browser via WebGPU. Use markdown for formatting, especially for code blocks." }
+            { role: "system", content: "You are a highly capable coding assistant. Provide clean, efficient code." }
         ];
 
-        // Renders markdown safely
-        function renderMarkdown(text) {
-            return DOMPurify.sanitize(marked.parse(text));
-        }
-
-        // Add message to UI
-        function addMessageToUI(role, content, id = null) {
-            const wrapper = document.createElement('div');
-            wrapper.className = `flex w-full ${role === 'user' ? 'justify-end' : 'justify-start'}`;
-            
-            const bubble = document.createElement('div');
-            if (id) bubble.id = id;
-            
-            if (role === 'user') {
-                bubble.className = 'user-message bg-brand-600 text-white px-5 py-3.5 max-w-[85%] md:max-w-[70%] text-[15px] leading-relaxed shadow-md whitespace-pre-wrap';
-                bubble.textContent = content; // Raw text for user
-            } else {
-                bubble.className = 'ai-message bg-slate-800 border border-slate-700 text-slate-200 px-6 py-4 max-w-[95%] md:max-w-[85%] text-[15px] shadow-sm prose prose-invert prose-brand max-w-none';
-                bubble.innerHTML = renderMarkdown(content);
-            }
-            
-            wrapper.appendChild(bubble);
-            chatHistory.appendChild(wrapper);
-            
-            // Smooth scroll to bottom
-            const mainContent = document.getElementById('chat-history');
-            mainContent.scrollTo({ top: mainContent.scrollHeight, behavior: 'smooth' });
-            
-            // Re-init syntax highlighting/icons if needed later
-        }
-
-        // Handle WebLLM Download Progress
-        const initProgressCallback = (initProgress) => {
-            setupStatusBox.innerHTML = `
-                <div class="flex items-center justify-center gap-2 text-brand-400">
-                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> 
-                    <span>${initProgress.text}</span>
-                </div>`;
-            lucide.createIcons();
-            
-            // Extract percentage for progress bar
-            const match = initProgress.text.match(/(\d+)%/);
-            if (match) {
-                setupProgressBar.style.width = `${match[1]}%`;
-            } else if (initProgress.text.includes("Finish")) {
-                setupProgressBar.style.width = "100%";
-            }
-        };
-
-        // Start WebLLM Engine
-        startBtn.addEventListener('click', async () => {
-            if (!navigator.gpu) {
-                setupStatusBox.innerHTML = `<span class="text-red-400"><i data-lucide="x-circle" class="w-4 h-4 inline"></i> WebGPU not supported in this browser. Use Chrome or Edge.</span>`;
-                lucide.createIcons();
-                return;
-            }
-
-            startBtn.disabled = true;
-            startBtn.innerHTML = `<i data-lucide="loader-2" class="w-5 h-5 animate-spin"></i> Initializing...`;
-            lucide.createIcons();
-
+        async function initAI() {
             try {
-                // Initialize the engine (this triggers the download/cache)
-                engine = await CreateMLCEngine(selectedModel, { initProgressCallback });
-                
-                // Success! Update UI
-                setupOverlay.classList.add('hidden'); // Hide overlay
-                
-                // Update Sidebar status
-                if (gpuStatusDot) {
-                    gpuStatusDot.classList.replace('bg-slate-600', 'bg-emerald-400');
-                    gpuStatusDot.classList.add('shadow-[0_0_8px_rgba(52,211,153,0.8)]');
-                    gpuStatusText.textContent = "WebGPU Active (Llama 3.1)";
-                    gpuStatusText.classList.replace('text-slate-400', 'text-emerald-400');
-                }
-
-                // Enable Input
-                chatInput.disabled = false;
-                chatSubmit.disabled = false;
-                chatInput.placeholder = "Message LocalGPT...";
-                chatInput.focus();
-
-                // Add greeting
-                addMessageToUI('assistant', "Hello! I am **Llama 3.1 8B**, running entirely offline in your browser. How can I help you today?");
-
-            } catch (err) {
-                console.error(err);
-                setupStatusBox.innerHTML = `<span class="text-red-400"><i data-lucide="alert-triangle" class="w-4 h-4 inline"></i> Error loading model. See console.</span>`;
-                lucide.createIcons();
-                startBtn.disabled = false;
-                startBtn.innerHTML = `<i data-lucide="refresh-cw" class="w-5 h-5"></i> Retry`;
-            }
-        });
-
-        // Handle Form Submission (Enter to send)
-        chatInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                chatForm.dispatchEvent(new Event('submit'));
-            }
-        });
-
-        // Chat Logic (with Streaming)
-        chatForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const userText = chatInput.value.trim();
-            if (!userText || !engine) return;
-
-            // 1. Add User Message to UI
-            addMessageToUI('user', userText);
-            
-            // 2. Reset Input
-            chatInput.value = '';
-            chatInput.style.height = '56px'; // reset height
-            chatInput.disabled = true;
-            chatSubmit.disabled = true;
-            
-            // 3. Create Placeholder for AI message
-            const aiMessageId = 'msg-' + Date.now();
-            addMessageToUI('assistant', '<i data-lucide="loader-2" class="w-5 h-5 animate-spin text-brand-400"></i>', aiMessageId);
-            lucide.createIcons();
-            const aiBubble = document.getElementById(aiMessageId);
-
-            messages.push({ role: "user", content: userText });
-
-            try {
-                // 4. Generate Response using Streaming
-                const chunks = await engine.chat.completions.create({
-                    messages,
-                    temperature: 0.7,
-                    stream: true // Enable streaming
+                // Create the engine and track the download/loading progress
+                engine = await CreateMLCEngine(selectedModel, {
+                    initProgressCallback: (progress) => {
+                        statusText.innerText = `Status: ${progress.text}`;
+                    }
                 });
                 
-                let fullResponse = "";
-                
-                for await (const chunk of chunks) {
-                    const delta = chunk.choices[0]?.delta?.content || "";
-                    fullResponse += delta;
-                    
-                    // Live update the markdown rendering
-                    aiBubble.innerHTML = renderMarkdown(fullResponse);
-                    
-                    // Keep scrolled to bottom while streaming
-                    const mainContent = document.getElementById('chat-history');
-                    mainContent.scrollTo({ top: mainContent.scrollHeight });
-                }
-
-                // 5. Save the final message to history
-                messages.push({ role: "assistant", content: fullResponse });
-                
-            } catch (err) {
-                console.error(err);
-                aiBubble.innerHTML = `<span class="text-red-400">Error generating response.</span>`;
-            } finally {
-                // 6. Re-enable input
-                chatInput.disabled = false;
-                chatSubmit.disabled = false;
-                chatInput.focus();
+                statusText.innerText = "Status: Ready! Running locally on your 5060 Ti via WebGPU.";
+                statusText.style.color = "#3fb950";
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+            } catch (error) {
+                statusText.innerText = "Error: Could not load the model. Make sure you are using a Chromium-based browser (Chrome/Edge) with WebGPU enabled.";
+                statusText.style.color = "#f85149";
+                console.error(error);
             }
+        }
+
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // Display user message
+            appendMessage("You", text, "user");
+            messages.push({ role: "user", content: text });
+            
+            // Lock UI while generating
+            userInput.value = "";
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+
+            const botDiv = appendMessage("Qwen", "...", "bot");
+
+            try {
+                // Stream the response from the local WebGPU model
+                const chunks = await engine.chat.completions.create({
+                    messages: messages,
+                    stream: true,
+                });
+
+                let fullResponse = "";
+                for await (const chunk of chunks) {
+                    const content = chunk.choices[0]?.delta?.content || "";
+                    fullResponse += content;
+                    botDiv.innerText = `Qwen:\n\n${fullResponse}`;
+                }
+                
+                messages.push({ role: "assistant", content: fullResponse });
+            } catch (error) {
+                botDiv.innerText = "Error generating response. Check the console.";
+                console.error(error);
+            }
+
+            // Unlock UI
+            userInput.disabled = false;
+            sendBtn.disabled = false;
+            userInput.focus();
+        }
+
+        function appendMessage(sender, text, className) {
+            const div = document.createElement("div");
+            div.className = `message ${className}`;
+            div.innerText = `${sender}:\n\n${text}`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+            return div;
+        }
+
+        sendBtn.addEventListener("click", sendMessage);
+        userInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") sendMessage();
         });
+
+        // Boot up the AI when the page loads
+        initAI();
     </script>
 </body>
 </html>
