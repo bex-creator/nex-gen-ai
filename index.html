@@ -34,12 +34,15 @@
             justify-content: space-between;
             align-items: center;
             box-sizing: border-box;
+            flex-wrap: wrap;
+            gap: 1rem;
         }
 
         .header-left {
             display: flex;
             align-items: center;
             gap: 1rem;
+            flex-wrap: wrap;
         }
 
         .header-right {
@@ -57,16 +60,16 @@
             letter-spacing: -0.5px;
         }
 
-        #status {
-            font-size: 0.8rem;
+        .status-badge {
+            font-size: 0.75rem;
             color: var(--text-secondary);
             background: #1e1e20;
             padding: 0.4rem 0.8rem;
             border-radius: 20px;
-            max-width: 200px;
             text-overflow: ellipsis;
             white-space: nowrap;
             overflow: hidden;
+            border: 1px solid #3c4043;
         }
 
         .header-btn {
@@ -78,9 +81,6 @@
             font-size: 0.8rem;
             cursor: pointer;
             transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 0.3rem;
         }
 
         .header-btn:hover {
@@ -133,11 +133,6 @@
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-        }
-
-        .user .sender-name {
-            margin-left: 0;
-            margin-right: 0.5rem;
         }
 
         .message {
@@ -196,10 +191,6 @@
             padding: 0.8rem 0;
         }
 
-        input[type="text"]::placeholder {
-            color: #80868b;
-        }
-
         .icon-btn {
             background: transparent;
             border: none;
@@ -210,7 +201,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: background 0.2s ease, color 0.2s ease;
+            transition: all 0.2s ease;
         }
 
         .icon-btn:hover:not(:disabled) {
@@ -243,7 +234,7 @@
             font-size: 0.7rem;
             color: #747775;
             margin-top: 0.5rem;
-            margin-bottom: 0.5rem;
+            text-align: center;
         }
     </style>
 </head>
@@ -252,7 +243,8 @@
     <header>
         <div class="header-left">
             <h1>Nexus AI</h1>
-            <div id="status">Initializing WebGPU...</div>
+            <div id="status" class="status-badge">Brain: Initializing WebGPU...</div>
+            <div id="tts-status" class="status-badge">Voice: Waiting...</div>
         </div>
         <div class="header-right">
             <button id="voice-toggle-btn" class="header-btn">🔊 Voice: On</button>
@@ -266,21 +258,18 @@
         <div class="input-wrapper">
             <input type="text" id="user-input" placeholder="Ask Nexus AI something..." disabled>
             <button id="mic-btn" class="icon-btn" disabled aria-label="Speak">
-                <svg viewBox="0 0 24 24">
-                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.42 2.72 6.2 6 6.72V21h2v-3.28c3.28-.52 6-3.3 6-6.72h-1.7z"></path>
-                </svg>
+                <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.42 2.72 6.2 6 6.72V21h2v-3.28c3.28-.52 6-3.3 6-6.72h-1.7z"></path></svg>
             </button>
             <button id="send-btn" class="icon-btn" disabled aria-label="Send message">
-                <svg viewBox="0 0 24 24">
-                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-                </svg>
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
             </button>
         </div>
-        <div class="footer-note">Nexus AI runs locally on your GPU. Microphone and Voice output run strictly in your browser.</div>
+        <div class="footer-note">Qwen2.5-Coder runs on your GPU. Kokoro-82M Voice runs on your CPU. 100% Private.</div>
     </div>
 
     <script type="module">
         import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+        import { KokoroTTS } from "https://esm.run/kokoro-js";
 
         const selectedModel = "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC";
         const STORAGE_KEY = "nexus_ai_chat_history";
@@ -292,18 +281,114 @@
         const clearBtn = document.getElementById("clear-btn");
         const voiceToggleBtn = document.getElementById("voice-toggle-btn");
         const statusText = document.getElementById("status");
+        const ttsStatusText = document.getElementById("tts-status");
 
         let engine;
         let messages = [];
         let isVoiceEnabled = true;
-        let recognition;
+
+        // Streaming TTS Variables
+        let ttsEngine = null;
+        let audioContext = null;
+        let currentAudioSource = null;
+        let audioQueue = [];
+        let isProcessingAudio = false;
 
         const systemMessage = { 
             role: "system", 
-            content: "You are Nexus AI, a highly advanced local coding assistant built on WebGPU. Provide exceptionally clean, accurate, and functional code. Keep your spoken explanations clear and concise." 
+            content: "You are Nexus AI, a highly advanced local coding assistant. Keep explanations extremely concise and speak directly, as your responses are read aloud via text-to-speech." 
         };
 
-        // --- Voice Setup (Speech to Text) ---
+        // --- Voice Setup: Hyper-Realistic Kokoro TTS ---
+        async function initTTS() {
+            try {
+                ttsStatusText.innerText = "Voice: Downloading Kokoro-82M (~85MB)...";
+                ttsEngine = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
+                    dtype: "q8",
+                    device: "wasm" 
+                });
+                ttsStatusText.innerText = "Voice: Ready (af_sky)";
+                ttsStatusText.style.borderColor = "#0f9d58";
+                ttsStatusText.style.color = "#e3e3e3";
+            } catch (error) {
+                ttsStatusText.innerText = "Voice: Error";
+                ttsStatusText.style.borderColor = "#ea4335";
+                console.error("Realistic TTS Error:", error);
+            }
+        }
+
+        // --- Streaming Audio Queue System ---
+        function stopAudio() {
+            audioQueue = []; // Empty the queue
+            if (currentAudioSource) {
+                currentAudioSource.stop();
+                currentAudioSource.disconnect();
+                currentAudioSource = null;
+            }
+            isProcessingAudio = false;
+        }
+
+        async function queueAudio(text) {
+            if (!isVoiceEnabled || !ttsEngine) return;
+
+            // Strip out markdown symbols and URLs for smooth speech
+            let cleanText = text.replace(/```/g, " ")
+                                .replace(/[#*`~>]/g, '')
+                                .replace(/https?:\/\/[^\s]+/g, "a link")
+                                .trim();
+
+            if (!cleanText) return;
+
+            audioQueue.push(cleanText);
+            processAudioQueue();
+        }
+
+        async function processAudioQueue() {
+            if (isProcessingAudio || audioQueue.length === 0) return;
+            isProcessingAudio = true;
+
+            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') await audioContext.resume();
+
+            while (audioQueue.length > 0) {
+                const textToSpeak = audioQueue.shift();
+                try {
+                    const audioData = await ttsEngine.generate(textToSpeak, { voice: "af_sky" });
+                    const rawAudio = audioData.audio || audioData.data;
+                    const sampleRate = audioData.sampling_rate || 24000;
+
+                    const buffer = audioContext.createBuffer(1, rawAudio.length, sampleRate);
+                    buffer.getChannelData(0).set(rawAudio);
+                    
+                    currentAudioSource = audioContext.createBufferSource();
+                    currentAudioSource.buffer = buffer;
+                    currentAudioSource.connect(audioContext.destination);
+                    
+                    // Wait for current sentence to finish before playing the next
+                    await new Promise((resolve) => {
+                        currentAudioSource.onended = resolve;
+                        currentAudioSource.start();
+                    });
+
+                } catch (error) {
+                    console.error("Audio generation error:", error);
+                }
+            }
+            isProcessingAudio = false;
+        }
+
+        voiceToggleBtn.addEventListener("click", () => {
+            isVoiceEnabled = !isVoiceEnabled;
+            if (!isVoiceEnabled) {
+                stopAudio();
+                voiceToggleBtn.innerText = "🔇 Voice: Off";
+            } else {
+                voiceToggleBtn.innerText = "🔊 Voice: On";
+            }
+        });
+
+        // --- Voice Setup: Speech to Text (Microphone) ---
+        let recognition;
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             recognition = new SpeechRecognition();
@@ -316,22 +401,15 @@
                 userInput.placeholder = "Listening...";
             };
 
-            recognition.onerror = (e) => {
-                console.error("Speech recognition error", e);
-                stopListening();
-            };
-
-            recognition.onend = () => {
-                stopListening();
-            };
+            recognition.onerror = () => stopListening();
+            recognition.onend = () => stopListening();
 
             recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript;
-                userInput.value = transcript;
-                sendMessage(); // Auto-send when you finish speaking
+                userInput.value = event.results[0][0].transcript;
+                sendMessage(); 
             };
         } else {
-            micBtn.style.display = "none"; // Hide if browser doesn't support STT
+            micBtn.style.display = "none"; 
         }
 
         function stopListening() {
@@ -343,54 +421,12 @@
             if (micBtn.classList.contains("listening")) {
                 recognition.stop();
             } else {
-                window.speechSynthesis.cancel(); // Stop talking if AI is speaking
+                stopAudio();
                 recognition.start();
             }
         });
 
-        // --- Voice Setup (Text to Speech) ---
-        function speak(text) {
-            if (!isVoiceEnabled || !window.speechSynthesis) return;
-
-            window.speechSynthesis.cancel(); // Interrupt any existing speech
-            
-            // Clean up text slightly for better speech (e.g., stripping out code blocks so it doesn't read code out loud character by character)
-            let cleanText = text.replace(/```[\s\S]*?```/g, "[Showing code block on screen]");
-
-            const utterance = new SpeechSynthesisUtterance(cleanText);
-            
-            // Look for a high-quality "nice" voice
-            const voices = window.speechSynthesis.getVoices();
-            const niceVoice = voices.find(voice => 
-                (voice.name.includes("Google") || voice.name.includes("Natural") || voice.name.includes("Microsoft")) && voice.lang.startsWith("en")
-            ) || voices.find(voice => voice.lang.startsWith("en")); // fallback to any English voice
-
-            if (niceVoice) {
-                utterance.voice = niceVoice;
-            }
-            utterance.rate = 1.0; // Normal speech speed
-            window.speechSynthesis.speak(utterance);
-        }
-
-        // Trigger voice loading for Chrome
-        if (window.speechSynthesis) {
-            window.speechSynthesis.getVoices();
-            if (window.speechSynthesis.onvoiceschanged !== undefined) {
-                window.speechSynthesis.onvoiceschanged = window.speechSynthesis.getVoices;
-            }
-        }
-
-        voiceToggleBtn.addEventListener("click", () => {
-            isVoiceEnabled = !isVoiceEnabled;
-            if (!isVoiceEnabled) {
-                window.speechSynthesis.cancel();
-                voiceToggleBtn.innerText = "🔇 Voice: Off";
-            } else {
-                voiceToggleBtn.innerText = "🔊 Voice: On";
-            }
-        });
-
-        // --- Chat History Logic ---
+        // --- Chat Logic & Main AI ---
         function loadHistory() {
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) {
@@ -408,51 +444,48 @@
             }
         }
 
-        function saveHistory() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-        }
-
         clearBtn.addEventListener("click", () => {
-            if(confirm("Are you sure you want to clear the chat history?")) {
-                window.speechSynthesis.cancel();
+            if(confirm("Wipe chat memory?")) {
+                stopAudio();
                 localStorage.removeItem(STORAGE_KEY);
                 messages = [systemMessage];
                 chatContainer.innerHTML = "";
             }
         });
 
-        // --- Initialize AI ---
         async function initAI() {
             loadHistory();
+            initTTS(); 
 
             try {
                 engine = await CreateMLCEngine(selectedModel, {
                     initProgressCallback: (progress) => {
-                        statusText.innerText = progress.text.replace(/\[.*\]/, '').trim();
+                        statusText.innerText = "Brain: " + progress.text.replace(/\[.*\]/, '').trim();
                     }
                 });
                 
-                statusText.innerText = "Local GPU Active";
-                statusText.style.border = "1px solid #0f9d58";
+                statusText.innerText = "Brain: GPU Active";
+                statusText.style.borderColor = "#0f9d58";
                 userInput.disabled = false;
                 sendBtn.disabled = false;
                 micBtn.disabled = false;
                 userInput.focus();
             } catch (error) {
-                statusText.innerText = "WebGPU Error";
-                statusText.style.color = "#ea4335";
+                statusText.innerText = "Brain: Error";
+                statusText.style.borderColor = "#ea4335";
                 console.error(error);
             }
         }
 
-        // --- Core Messaging ---
         async function sendMessage() {
             const text = userInput.value.trim();
             if (!text) return;
 
+            stopAudio(); // Stop old speech before answering new prompt
+
             appendMessage("You", text, "user");
             messages.push({ role: "user", content: text });
-            saveHistory();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
             
             userInput.value = "";
             userInput.disabled = true;
@@ -460,7 +493,7 @@
             micBtn.disabled = true;
 
             const botElements = appendMessage("Nexus AI", "Thinking...", "bot");
-            const textElement = botElements.textElement;
+            let sentenceBuffer = "";
 
             try {
                 const chunks = await engine.chat.completions.create({
@@ -472,18 +505,34 @@
                 for await (const chunk of chunks) {
                     const content = chunk.choices[0]?.delta?.content || "";
                     fullResponse += content;
-                    textElement.innerText = fullResponse;
+                    sentenceBuffer += content;
+                    
+                    botElements.textElement.innerText = fullResponse;
                     chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                    // Stream Audio: Split by sentence markers (. ! ? \n) and queue it
+                    let endIdx = sentenceBuffer.search(/[\.!\?](?:\s|\n|$)|(\n\n)/);
+                    while (endIdx !== -1) {
+                        let splitIndex = endIdx + 1;
+                        let sentence = sentenceBuffer.substring(0, splitIndex);
+                        
+                        queueAudio(sentence);
+                        
+                        sentenceBuffer = sentenceBuffer.substring(splitIndex).trimStart();
+                        endIdx = sentenceBuffer.search(/[\.!\?](?:\s|\n|$)|(\n\n)/);
+                    }
                 }
                 
+                // Catch any remaining text that didn't end in punctuation
+                if (sentenceBuffer.trim().length > 0) {
+                    queueAudio(sentenceBuffer);
+                }
+
                 messages.push({ role: "assistant", content: fullResponse });
-                saveHistory();
-                
-                // Speak the AI answer back
-                speak(fullResponse);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
                 
             } catch (error) {
-                textElement.innerText = "An error occurred during local generation.";
+                botElements.textElement.innerText = "An error occurred during local generation.";
                 console.error(error);
             }
 
@@ -508,10 +557,9 @@
             wrapper.appendChild(nameDiv);
             wrapper.appendChild(msgDiv);
             chatContainer.appendChild(wrapper);
-            
             chatContainer.scrollTop = chatContainer.scrollHeight;
             
-            return { wrapperElement: wrapper, textElement: msgDiv };
+            return { textElement: msgDiv };
         }
 
         sendBtn.addEventListener("click", sendMessage);
