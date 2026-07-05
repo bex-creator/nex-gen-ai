@@ -3,122 +3,263 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local Qwen Coder AI</title>
+    <title>Nexus AI</title>
     <style>
+        :root {
+            --bg-color: #131314;
+            --input-bg: #1e1e20;
+            --text-color: #e3e3e3;
+            --text-secondary: #aaaaaa;
+            --accent-gradient: linear-gradient(90deg, #4285f4, #9b51e0, #e91e63);
+            --user-msg-bg: #2a2b2d;
+        }
+
         body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            align-items: center;
+        }
+
+        header {
+            width: 100%;
             max-width: 800px;
-            margin: 2rem auto;
-            padding: 0 1rem;
-            background-color: #0d1117;
-            color: #c9d1d9;
+            padding: 1.5rem 1rem 0.5rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-sizing: border-box;
         }
-        h1 { color: #58a6ff; }
-        #chat-box {
-            height: 500px;
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 500;
+            margin: 0;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        #status {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            background: #1e1e20;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            max-width: 60%;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        #chat-container {
+            flex: 1;
+            width: 100%;
+            max-width: 800px;
             overflow-y: auto;
-            border: 1px solid #30363d;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            background-color: #161b22;
-            border-radius: 6px;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
         }
+
+        /* Scrollbar styling */
+        #chat-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        #chat-container::-webkit-scrollbar-thumb {
+            background: #303030;
+            border-radius: 4px;
+        }
+
+        .message-wrapper {
+            display: flex;
+            flex-direction: column;
+            max-width: 85%;
+        }
+
+        .message-wrapper.user {
+            align-self: flex-end;
+            align-items: flex-end;
+        }
+
+        .message-wrapper.bot {
+            align-self: flex-start;
+            align-items: flex-start;
+            width: 100%;
+        }
+
+        .sender-name {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.3rem;
+            margin-left: 0.5rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .user .sender-name {
+            margin-left: 0;
+            margin-right: 0.5rem;
+        }
+
         .message {
-            margin-bottom: 1rem;
-            padding: 0.8rem;
-            border-radius: 6px;
+            padding: 0.9rem 1.2rem;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            line-height: 1.5;
             white-space: pre-wrap;
+            word-break: break-word;
         }
-        .user {
-            background-color: #1f6feb;
-            color: white;
-            margin-left: 20%;
+
+        .user .message {
+            background-color: var(--user-msg-bg);
+            color: var(--text-color);
+            border-bottom-right-radius: 4px;
         }
-        .bot {
-            background-color: #21262d;
-            border: 1px solid #30363d;
-            margin-right: 20%;
+
+        .bot .message {
+            background-color: transparent;
+            color: var(--text-color);
+            padding-left: 0.5rem;
         }
-        #input-container { display: flex; gap: 0.5rem; }
+
+        #input-area {
+            width: 100%;
+            max-width: 800px;
+            padding: 1rem;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .input-wrapper {
+            display: flex;
+            width: 100%;
+            background-color: var(--input-bg);
+            border-radius: 32px;
+            padding: 0.4rem 0.5rem 0.4rem 1.5rem;
+            box-sizing: border-box;
+            align-items: center;
+            transition: box-shadow 0.2s ease;
+        }
+
+        .input-wrapper:focus-within {
+            box-shadow: 0 0 0 2px #3c4043;
+        }
+
         input[type="text"] {
             flex: 1;
-            padding: 1rem;
-            border-radius: 6px;
-            border: 1px solid #30363d;
-            background-color: #0d1117;
-            color: #c9d1d9;
-            font-size: 1rem;
-        }
-        button {
-            padding: 0 1.5rem;
-            background-color: #238636;
-            color: white;
+            background: transparent;
             border: none;
-            border-radius: 6px;
+            outline: none;
+            color: var(--text-color);
             font-size: 1rem;
-            cursor: pointer;
-            font-weight: bold;
+            padding: 0.8rem 0;
         }
+
+        input[type="text"]::placeholder {
+            color: #80868b;
+        }
+
+        button {
+            background: transparent;
+            border: none;
+            color: #8ab4f8;
+            cursor: pointer;
+            padding: 0.8rem;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        button:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
         button:disabled {
-            background-color: #21262d;
-            color: #8b949e;
+            color: #4a4a4a;
             cursor: not-allowed;
         }
-        #status {
-            font-size: 0.9rem;
-            color: #8b949e;
-            margin-bottom: 1rem;
-            padding: 0.5rem;
-            background: #161b22;
-            border-radius: 4px;
+
+        button svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+        }
+
+        .footer-note {
+            font-size: 0.7rem;
+            color: #747775;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
         }
     </style>
 </head>
 <body>
 
-    <h1>Local Qwen2.5-Coder (WebGPU)</h1>
-    <div id="status">Status: Initializing... (The first time you run this, it will download ~4GB to your browser cache. Please wait.)</div>
+    <header>
+        <h1>Nexus AI</h1>
+        <div id="status">Initializing WebGPU...</div>
+    </header>
     
-    <div id="chat-box"></div>
+    <div id="chat-container"></div>
     
-    <div id="input-container">
-        <input type="text" id="user-input" placeholder="Ask a coding question..." disabled>
-        <button id="send-btn" disabled>Send</button>
+    <div id="input-area">
+        <div class="input-wrapper">
+            <input type="text" id="user-input" placeholder="Ask Nexus AI something..." disabled>
+            <button id="send-btn" disabled aria-label="Send message">
+                <svg viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="footer-note">Nexus AI uses WebGPU to run Qwen2.5-Coder locally on your GPU.</div>
     </div>
 
     <script type="module">
         import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
-        // This is the 7-Billion parameter Qwen2.5 Coder model, optimized for WebGPU
         const selectedModel = "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC";
         
-        const chatBox = document.getElementById("chat-box");
+        const chatContainer = document.getElementById("chat-container");
         const userInput = document.getElementById("user-input");
         const sendBtn = document.getElementById("send-btn");
         const statusText = document.getElementById("status");
 
         let engine;
         let messages = [
-            { role: "system", content: "You are a highly capable coding assistant. Provide clean, efficient code." }
+            { role: "system", content: "You are Nexus AI, a highly advanced local coding assistant built on WebGPU. Provide exceptionally clean, accurate, and functional code." }
         ];
 
         async function initAI() {
             try {
-                // Create the engine and track the download/loading progress
                 engine = await CreateMLCEngine(selectedModel, {
                     initProgressCallback: (progress) => {
-                        statusText.innerText = `Status: ${progress.text}`;
+                        // Strip internal text to keep the status bar clean
+                        statusText.innerText = progress.text.replace(/\[.*\]/, '').trim();
                     }
                 });
                 
-                statusText.innerText = "Status: Ready! Running locally on your 5060 Ti via WebGPU.";
-                statusText.style.color = "#3fb950";
+                statusText.innerText = "Local GPU Active";
+                statusText.style.border = "1px solid #0f9d58";
                 userInput.disabled = false;
                 sendBtn.disabled = false;
                 userInput.focus();
             } catch (error) {
-                statusText.innerText = "Error: Could not load the model. Make sure you are using a Chromium-based browser (Chrome/Edge) with WebGPU enabled.";
-                statusText.style.color = "#f85149";
+                statusText.innerText = "WebGPU Error";
+                statusText.style.color = "#ea4335";
                 console.error(error);
             }
         }
@@ -127,19 +268,17 @@
             const text = userInput.value.trim();
             if (!text) return;
 
-            // Display user message
             appendMessage("You", text, "user");
             messages.push({ role: "user", content: text });
             
-            // Lock UI while generating
             userInput.value = "";
             userInput.disabled = true;
             sendBtn.disabled = true;
 
-            const botDiv = appendMessage("Qwen", "...", "bot");
+            const botElements = appendMessage("Nexus AI", "Thinking...", "bot");
+            const textElement = botElements.textElement;
 
             try {
-                // Stream the response from the local WebGPU model
                 const chunks = await engine.chat.completions.create({
                     messages: messages,
                     stream: true,
@@ -149,28 +288,40 @@
                 for await (const chunk of chunks) {
                     const content = chunk.choices[0]?.delta?.content || "";
                     fullResponse += content;
-                    botDiv.innerText = `Qwen:\n\n${fullResponse}`;
+                    textElement.innerText = fullResponse;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
                 }
                 
                 messages.push({ role: "assistant", content: fullResponse });
             } catch (error) {
-                botDiv.innerText = "Error generating response. Check the console.";
+                textElement.innerText = "An error occurred during local generation.";
                 console.error(error);
             }
 
-            // Unlock UI
             userInput.disabled = false;
             sendBtn.disabled = false;
             userInput.focus();
         }
 
-        function appendMessage(sender, text, className) {
-            const div = document.createElement("div");
-            div.className = `message ${className}`;
-            div.innerText = `${sender}:\n\n${text}`;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-            return div;
+        function appendMessage(sender, text, type) {
+            const wrapper = document.createElement("div");
+            wrapper.className = `message-wrapper ${type}`;
+
+            const nameDiv = document.createElement("div");
+            nameDiv.className = "sender-name";
+            nameDiv.innerText = sender;
+
+            const msgDiv = document.createElement("div");
+            msgDiv.className = "message";
+            msgDiv.innerText = text;
+
+            wrapper.appendChild(nameDiv);
+            wrapper.appendChild(msgDiv);
+            chatContainer.appendChild(wrapper);
+            
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            return { wrapperElement: wrapper, textElement: msgDiv };
         }
 
         sendBtn.addEventListener("click", sendMessage);
@@ -178,7 +329,6 @@
             if (e.key === "Enter") sendMessage();
         });
 
-        // Boot up the AI when the page loads
         initAI();
     </script>
 </body>
