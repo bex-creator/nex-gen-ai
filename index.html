@@ -36,6 +36,17 @@
             box-sizing: border-box;
         }
 
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+
         h1 {
             font-size: 1.5rem;
             font-weight: 500;
@@ -52,10 +63,29 @@
             background: #1e1e20;
             padding: 0.4rem 0.8rem;
             border-radius: 20px;
-            max-width: 60%;
+            max-width: 200px;
             text-overflow: ellipsis;
             white-space: nowrap;
             overflow: hidden;
+        }
+
+        .header-btn {
+            background: #1e1e20;
+            border: 1px solid #3c4043;
+            color: var(--text-secondary);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .header-btn:hover {
+            background: #2a2b2d;
+            color: var(--text-color);
         }
 
         #chat-container {
@@ -70,7 +100,6 @@
             gap: 1.5rem;
         }
 
-        /* Scrollbar styling */
         #chat-container::-webkit-scrollbar {
             width: 8px;
         }
@@ -171,7 +200,7 @@
             color: #80868b;
         }
 
-        button {
+        .icon-btn {
             background: transparent;
             border: none;
             color: #8ab4f8;
@@ -181,22 +210,33 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: background 0.2s ease;
+            transition: background 0.2s ease, color 0.2s ease;
         }
 
-        button:hover:not(:disabled) {
+        .icon-btn:hover:not(:disabled) {
             background: rgba(255, 255, 255, 0.05);
         }
 
-        button:disabled {
+        .icon-btn:disabled {
             color: #4a4a4a;
             cursor: not-allowed;
         }
 
-        button svg {
+        .icon-btn svg {
             width: 24px;
             height: 24px;
             fill: currentColor;
+        }
+
+        #mic-btn.listening {
+            color: #ea4335;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
         }
 
         .footer-note {
@@ -210,8 +250,14 @@
 <body>
 
     <header>
-        <h1>Nexus AI</h1>
-        <div id="status">Initializing WebGPU...</div>
+        <div class="header-left">
+            <h1>Nexus AI</h1>
+            <div id="status">Initializing WebGPU...</div>
+        </div>
+        <div class="header-right">
+            <button id="voice-toggle-btn" class="header-btn">🔊 Voice: On</button>
+            <button id="clear-btn" class="header-btn">Clear Chat</button>
+        </div>
     </header>
     
     <div id="chat-container"></div>
@@ -219,35 +265,169 @@
     <div id="input-area">
         <div class="input-wrapper">
             <input type="text" id="user-input" placeholder="Ask Nexus AI something..." disabled>
-            <button id="send-btn" disabled aria-label="Send message">
+            <button id="mic-btn" class="icon-btn" disabled aria-label="Speak">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.42 2.72 6.2 6 6.72V21h2v-3.28c3.28-.52 6-3.3 6-6.72h-1.7z"></path>
+                </svg>
+            </button>
+            <button id="send-btn" class="icon-btn" disabled aria-label="Send message">
                 <svg viewBox="0 0 24 24">
                     <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
                 </svg>
             </button>
         </div>
-        <div class="footer-note">Nexus AI uses WebGPU to run Qwen2.5-Coder locally on your GPU.</div>
+        <div class="footer-note">Nexus AI runs locally on your GPU. Microphone and Voice output run strictly in your browser.</div>
     </div>
 
     <script type="module">
         import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
 
         const selectedModel = "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC";
+        const STORAGE_KEY = "nexus_ai_chat_history";
         
         const chatContainer = document.getElementById("chat-container");
         const userInput = document.getElementById("user-input");
         const sendBtn = document.getElementById("send-btn");
+        const micBtn = document.getElementById("mic-btn");
+        const clearBtn = document.getElementById("clear-btn");
+        const voiceToggleBtn = document.getElementById("voice-toggle-btn");
         const statusText = document.getElementById("status");
 
         let engine;
-        let messages = [
-            { role: "system", content: "You are Nexus AI, a highly advanced local coding assistant built on WebGPU. Provide exceptionally clean, accurate, and functional code." }
-        ];
+        let messages = [];
+        let isVoiceEnabled = true;
+        let recognition;
 
+        const systemMessage = { 
+            role: "system", 
+            content: "You are Nexus AI, a highly advanced local coding assistant built on WebGPU. Provide exceptionally clean, accurate, and functional code. Keep your spoken explanations clear and concise." 
+        };
+
+        // --- Voice Setup (Speech to Text) ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                micBtn.classList.add("listening");
+                userInput.placeholder = "Listening...";
+            };
+
+            recognition.onerror = (e) => {
+                console.error("Speech recognition error", e);
+                stopListening();
+            };
+
+            recognition.onend = () => {
+                stopListening();
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                userInput.value = transcript;
+                sendMessage(); // Auto-send when you finish speaking
+            };
+        } else {
+            micBtn.style.display = "none"; // Hide if browser doesn't support STT
+        }
+
+        function stopListening() {
+            micBtn.classList.remove("listening");
+            userInput.placeholder = "Ask Nexus AI something...";
+        }
+
+        micBtn.addEventListener("click", () => {
+            if (micBtn.classList.contains("listening")) {
+                recognition.stop();
+            } else {
+                window.speechSynthesis.cancel(); // Stop talking if AI is speaking
+                recognition.start();
+            }
+        });
+
+        // --- Voice Setup (Text to Speech) ---
+        function speak(text) {
+            if (!isVoiceEnabled || !window.speechSynthesis) return;
+
+            window.speechSynthesis.cancel(); // Interrupt any existing speech
+            
+            // Clean up text slightly for better speech (e.g., stripping out code blocks so it doesn't read code out loud character by character)
+            let cleanText = text.replace(/```[\s\S]*?```/g, "[Showing code block on screen]");
+
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            
+            // Look for a high-quality "nice" voice
+            const voices = window.speechSynthesis.getVoices();
+            const niceVoice = voices.find(voice => 
+                (voice.name.includes("Google") || voice.name.includes("Natural") || voice.name.includes("Microsoft")) && voice.lang.startsWith("en")
+            ) || voices.find(voice => voice.lang.startsWith("en")); // fallback to any English voice
+
+            if (niceVoice) {
+                utterance.voice = niceVoice;
+            }
+            utterance.rate = 1.0; // Normal speech speed
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Trigger voice loading for Chrome
+        if (window.speechSynthesis) {
+            window.speechSynthesis.getVoices();
+            if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                window.speechSynthesis.onvoiceschanged = window.speechSynthesis.getVoices;
+            }
+        }
+
+        voiceToggleBtn.addEventListener("click", () => {
+            isVoiceEnabled = !isVoiceEnabled;
+            if (!isVoiceEnabled) {
+                window.speechSynthesis.cancel();
+                voiceToggleBtn.innerText = "🔇 Voice: Off";
+            } else {
+                voiceToggleBtn.innerText = "🔊 Voice: On";
+            }
+        });
+
+        // --- Chat History Logic ---
+        function loadHistory() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    messages = JSON.parse(saved);
+                    messages.forEach(msg => {
+                        if (msg.role === "user") appendMessage("You", msg.content, "user");
+                        if (msg.role === "assistant") appendMessage("Nexus AI", msg.content, "bot");
+                    });
+                } catch (e) {
+                    messages = [systemMessage];
+                }
+            } else {
+                messages = [systemMessage];
+            }
+        }
+
+        function saveHistory() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+        }
+
+        clearBtn.addEventListener("click", () => {
+            if(confirm("Are you sure you want to clear the chat history?")) {
+                window.speechSynthesis.cancel();
+                localStorage.removeItem(STORAGE_KEY);
+                messages = [systemMessage];
+                chatContainer.innerHTML = "";
+            }
+        });
+
+        // --- Initialize AI ---
         async function initAI() {
+            loadHistory();
+
             try {
                 engine = await CreateMLCEngine(selectedModel, {
                     initProgressCallback: (progress) => {
-                        // Strip internal text to keep the status bar clean
                         statusText.innerText = progress.text.replace(/\[.*\]/, '').trim();
                     }
                 });
@@ -256,6 +436,7 @@
                 statusText.style.border = "1px solid #0f9d58";
                 userInput.disabled = false;
                 sendBtn.disabled = false;
+                micBtn.disabled = false;
                 userInput.focus();
             } catch (error) {
                 statusText.innerText = "WebGPU Error";
@@ -264,16 +445,19 @@
             }
         }
 
+        // --- Core Messaging ---
         async function sendMessage() {
             const text = userInput.value.trim();
             if (!text) return;
 
             appendMessage("You", text, "user");
             messages.push({ role: "user", content: text });
+            saveHistory();
             
             userInput.value = "";
             userInput.disabled = true;
             sendBtn.disabled = true;
+            micBtn.disabled = true;
 
             const botElements = appendMessage("Nexus AI", "Thinking...", "bot");
             const textElement = botElements.textElement;
@@ -293,6 +477,11 @@
                 }
                 
                 messages.push({ role: "assistant", content: fullResponse });
+                saveHistory();
+                
+                // Speak the AI answer back
+                speak(fullResponse);
+                
             } catch (error) {
                 textElement.innerText = "An error occurred during local generation.";
                 console.error(error);
@@ -300,6 +489,7 @@
 
             userInput.disabled = false;
             sendBtn.disabled = false;
+            micBtn.disabled = false;
             userInput.focus();
         }
 
