@@ -48,6 +48,7 @@
         .header-right {
             display: flex;
             gap: 0.5rem;
+            align-items: center;
         }
 
         h1 {
@@ -244,7 +245,6 @@
         <div class="header-left">
             <h1>Nexus AI</h1>
             <div id="status" class="status-badge">Brain: Initializing WebGPU...</div>
-            <div id="tts-status" class="status-badge">Voice: Waiting...</div>
         </div>
         <div class="header-right">
             <button id="voice-toggle-btn" class="header-btn">🔊 Voice: On</button>
@@ -264,12 +264,11 @@
                 <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
             </button>
         </div>
-        <div class="footer-note">Qwen2.5-Coder runs on your GPU. Kokoro-82M Voice runs on your CPU. 100% Private.</div>
+        <div class="footer-note">Qwen2.5-Coder runs on GPU. Voice runs instantly via Free Web Speech API.</div>
     </div>
 
     <script type="module">
         import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
-        import { KokoroTTS } from "https://esm.run/kokoro-js";
 
         const selectedModel = "Qwen2.5-Coder-7B-Instruct-q4f16_1-MLC";
         const STORAGE_KEY = "nexus_ai_chat_history";
@@ -281,55 +280,35 @@
         const clearBtn = document.getElementById("clear-btn");
         const voiceToggleBtn = document.getElementById("voice-toggle-btn");
         const statusText = document.getElementById("status");
-        const ttsStatusText = document.getElementById("tts-status");
 
         let engine;
         let messages = [];
         let isVoiceEnabled = true;
-
-        // Streaming TTS Variables
-        let ttsEngine = null;
-        let audioContext = null;
-        let currentAudioSource = null;
-        let audioQueue = [];
-        let isProcessingAudio = false;
 
         const systemMessage = { 
             role: "system", 
             content: "You are Nexus AI, a highly advanced local coding assistant. Keep explanations extremely concise and speak directly, as your responses are read aloud via text-to-speech." 
         };
 
-        // --- Voice Setup: Hyper-Realistic Kokoro TTS ---
-        async function initTTS() {
-            try {
-                ttsStatusText.innerText = "Voice: Downloading Kokoro-82M (~85MB)...";
-                ttsEngine = await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX", {
-                    dtype: "q8",
-                    device: "wasm" 
-                });
-                ttsStatusText.innerText = "Voice: Ready (af_sky)";
-                ttsStatusText.style.borderColor = "#0f9d58";
-                ttsStatusText.style.color = "#e3e3e3";
-            } catch (error) {
-                ttsStatusText.innerText = "Voice: Error";
-                ttsStatusText.style.borderColor = "#ea4335";
-                console.error("Realistic TTS Error:", error);
-            }
+        // --- Free Browser Native TTS Setup ---
+        const synth = window.speechSynthesis;
+        let availableVoices = [];
+
+        // Pre-load voices (browsers load these asynchronously)
+        function loadVoices() {
+            availableVoices = synth.getVoices();
+        }
+        loadVoices();
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadVoices;
         }
 
-        // --- Streaming Audio Queue System ---
         function stopAudio() {
-            audioQueue = []; // Empty the queue
-            if (currentAudioSource) {
-                currentAudioSource.stop();
-                currentAudioSource.disconnect();
-                currentAudioSource = null;
-            }
-            isProcessingAudio = false;
+            synth.cancel();
         }
 
-        async function queueAudio(text) {
-            if (!isVoiceEnabled || !ttsEngine) return;
+        function playNativeAudio(text) {
+            if (!isVoiceEnabled) return;
 
             // Strip out markdown symbols and URLs for smooth speech
             let cleanText = text.replace(/```/g, " ")
@@ -339,42 +318,22 @@
 
             if (!cleanText) return;
 
-            audioQueue.push(cleanText);
-            processAudioQueue();
-        }
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            
+            // Try to pick the best sounding, most realistic voice available
+            let bestVoice = availableVoices.find(v => v.name.includes("Google US English")) ||
+                            availableVoices.find(v => v.name.includes("Microsoft") && v.name.includes("Online")) ||
+                            availableVoices.find(v => v.lang === "en-US");
 
-        async function processAudioQueue() {
-            if (isProcessingAudio || audioQueue.length === 0) return;
-            isProcessingAudio = true;
-
-            if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioContext.state === 'suspended') await audioContext.resume();
-
-            while (audioQueue.length > 0) {
-                const textToSpeak = audioQueue.shift();
-                try {
-                    const audioData = await ttsEngine.generate(textToSpeak, { voice: "af_sky" });
-                    const rawAudio = audioData.audio || audioData.data;
-                    const sampleRate = audioData.sampling_rate || 24000;
-
-                    const buffer = audioContext.createBuffer(1, rawAudio.length, sampleRate);
-                    buffer.getChannelData(0).set(rawAudio);
-                    
-                    currentAudioSource = audioContext.createBufferSource();
-                    currentAudioSource.buffer = buffer;
-                    currentAudioSource.connect(audioContext.destination);
-                    
-                    // Wait for current sentence to finish before playing the next
-                    await new Promise((resolve) => {
-                        currentAudioSource.onended = resolve;
-                        currentAudioSource.start();
-                    });
-
-                } catch (error) {
-                    console.error("Audio generation error:", error);
-                }
+            if (bestVoice) {
+                utterance.voice = bestVoice;
             }
-            isProcessingAudio = false;
+            
+            // Slight adjustments for more natural cadence
+            utterance.rate = 1.05; 
+            utterance.pitch = 1;
+
+            synth.speak(utterance);
         }
 
         voiceToggleBtn.addEventListener("click", () => {
@@ -455,7 +414,6 @@
 
         async function initAI() {
             loadHistory();
-            initTTS(); 
 
             try {
                 engine = await CreateMLCEngine(selectedModel, {
@@ -481,7 +439,7 @@
             const text = userInput.value.trim();
             if (!text) return;
 
-            stopAudio(); // Stop old speech before answering new prompt
+            stopAudio();
 
             appendMessage("You", text, "user");
             messages.push({ role: "user", content: text });
@@ -510,22 +468,21 @@
                     botElements.textElement.innerText = fullResponse;
                     chatContainer.scrollTop = chatContainer.scrollHeight;
 
-                    // Stream Audio: Split by sentence markers (. ! ? \n) and queue it
+                    // Stream Audio: Split by sentence markers and play natively
                     let endIdx = sentenceBuffer.search(/[\.!\?](?:\s|\n|$)|(\n\n)/);
                     while (endIdx !== -1) {
                         let splitIndex = endIdx + 1;
                         let sentence = sentenceBuffer.substring(0, splitIndex);
                         
-                        queueAudio(sentence);
+                        playNativeAudio(sentence);
                         
                         sentenceBuffer = sentenceBuffer.substring(splitIndex).trimStart();
                         endIdx = sentenceBuffer.search(/[\.!\?](?:\s|\n|$)|(\n\n)/);
                     }
                 }
                 
-                // Catch any remaining text that didn't end in punctuation
                 if (sentenceBuffer.trim().length > 0) {
-                    queueAudio(sentenceBuffer);
+                    playNativeAudio(sentenceBuffer);
                 }
 
                 messages.push({ role: "assistant", content: fullResponse });
